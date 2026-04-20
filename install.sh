@@ -194,6 +194,9 @@ run_interactive() {
     ask SMTP_PASS "SMTP 密码 / App Password" "$SMTP_PASS" 1
     ask SMTP_FROM "SMTP 发件人（留空则自动用 SITE_NAME <SMTP_USER>）" "$SMTP_FROM"
   fi
+
+  show_final_summary
+  confirm_or_exit
 }
 
 if [ "${EUID}" -ne 0 ]; then

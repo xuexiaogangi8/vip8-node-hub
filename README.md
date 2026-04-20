@@ -50,6 +50,8 @@ bash install.sh
 - 是否启用 Nginx / HTTPS / UFW
 - 是否启用 Telegram / SMTP
 
+在真正安装前，还会显示一份“最终配置摘要”，让你确认后再继续。
+
 ### 方式二：静默式安装（传环境变量）
 
 ```bash
