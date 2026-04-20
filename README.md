@@ -54,6 +54,8 @@ bash install.sh
 
 如果系统源里的 Node.js 安装失败，脚本会自动尝试使用 NodeSource 安装 `nodejs`。
 
+脚本还会在安装前打印当前的 `node -v` 和 `npm -v`，并提醒：如果你使用的是 NodeSource 的 `nodejs`，不要再单独执行 `apt install npm`。
+
 ### 方式二：静默式安装（传环境变量）
 
 ```bash

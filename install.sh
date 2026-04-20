@@ -252,6 +252,13 @@ need_cmd npm
 need_cmd node
 need_cmd systemctl
 
+log "Node.js 运行环境"
+echo "- node: $(node -v)"
+echo "- npm:  $(npm -v)"
+if apt-cache policy npm 2>/dev/null | grep -q 'Installed:'; then
+  warn "检测到系统存在 Debian/Ubuntu 的 npm 包信息。若使用 NodeSource 的 nodejs，请不要再单独 apt install npm。"
+fi
+
 log "准备应用目录: ${APP_DIR}"
 mkdir -p "$APP_DIR"
 
