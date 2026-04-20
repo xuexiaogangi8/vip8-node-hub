@@ -1,4 +1,29 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+logs/
+runtime/
+tmp/
+
+*.log
+*.bak
+*.zip
+*.tar.gz
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 
 # large local files
 hongzaoshu.flac
 *.flac
+*.wav
+*.mp3
+*.m4a

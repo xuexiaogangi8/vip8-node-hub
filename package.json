@@ -4,6 +4,9 @@
   "description": "Telegram node collector + latency tester + subscription generator",
   "type": "module",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "dev": "node src/server.js",
     "start": "NODE_ENV=production node src/server.js",
