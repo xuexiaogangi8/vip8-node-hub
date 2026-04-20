@@ -115,6 +115,25 @@ const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${proc
 const SITE_NAME = String(process.env.SITE_NAME || '').trim() || (() => {
   try { return new URL(PUBLIC_BASE_URL).host || 'VIP8 Node Hub'; } catch { return 'VIP8 Node Hub'; }
 })();
+const UI_TEXT = {
+  memberCenter: String(process.env.UI_MEMBER_CENTER || '会员中心').trim() || '会员中心',
+  memberRegister: String(process.env.UI_MEMBER_REGISTER || '会员注册').trim() || '会员注册',
+  memberLogin: String(process.env.UI_MEMBER_LOGIN || '会员登录').trim() || '会员登录',
+  adminLogin: String(process.env.UI_ADMIN_LOGIN || '后台登录').trim() || '后台登录',
+  adminPanel: String(process.env.UI_ADMIN_PANEL || '管理员后台').trim() || '管理员后台',
+  registerEmailTitle: String(process.env.UI_REGISTER_EMAIL_TITLE || '邮箱注册').trim() || '邮箱注册',
+  registerHint: String(process.env.UI_REGISTER_HINT || '邀请码 + 邮箱验证码注册。注册成功后等待后台开通时长。').trim() || '邀请码 + 邮箱验证码注册。注册成功后等待后台开通时长。',
+  existingAccountLink: String(process.env.UI_EXISTING_ACCOUNT_LINK || '已有账号，去登录').trim() || '已有账号，去登录',
+  noAccountLink: String(process.env.UI_NO_ACCOUNT_LINK || '没有账号？去注册').trim() || '没有账号？去注册',
+  adminEntryLink: String(process.env.UI_ADMIN_ENTRY_LINK || '管理员入口').trim() || '管理员入口',
+  backToMemberLogin: String(process.env.UI_BACK_TO_MEMBER_LOGIN || '返回会员登录').trim() || '返回会员登录',
+  registerFailed: String(process.env.UI_REGISTER_FAILED || '注册失败').trim() || '注册失败',
+  loginFailed: String(process.env.UI_LOGIN_FAILED || '登录失败').trim() || '登录失败',
+  adminLoginFailed: String(process.env.UI_ADMIN_LOGIN_FAILED || '后台登录失败').trim() || '后台登录失败',
+  retryLink: String(process.env.UI_RETRY_LINK || '返回重试').trim() || '返回重试',
+  centerWelcome: String(process.env.UI_CENTER_WELCOME || '你的专属订阅在这，会员到期就自动失效。').trim() || '你的专属订阅在这，会员到期就自动失效。',
+  logout: String(process.env.UI_LOGOUT || '退出登录').trim() || '退出登录',
+};
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -269,9 +288,9 @@ app.get('/assets/bg-music', (_req, res) => {
 });
 
 app.get('/register', (_req, res) => {
-  res.type('html').send(pageWrap('会员注册', authCard(`
-    <h2>邮箱注册</h2>
-    <p class="muted">邀请码 + 邮箱验证码注册。注册成功后等待后台开通时长。</p>
+  res.type('html').send(pageWrap(UI_TEXT.memberRegister, authCard(`
+    <h2>${escapeHtml(UI_TEXT.registerEmailTitle)}</h2>
+    <p class="muted">${escapeHtml(UI_TEXT.registerHint)}</p>
     <form method="post" action="/register">
       <input name="invite_code" placeholder="邀请码" />
       <div style="height:12px"></div>
@@ -283,7 +302,7 @@ app.get('/register', (_req, res) => {
       <div style="height:12px"></div>
       <button type="submit">注册</button>
     </form>
-    <p class="muted"><a href="/login">已有账号，去登录</a> · <a href="/admin/login">管理员入口</a></p>
+    <p class="muted"><a href="/login">${escapeHtml(UI_TEXT.existingAccountLink)}</a> · <a href="/admin/login">${escapeHtml(UI_TEXT.adminEntryLink)}</a></p>
   `), registerScripts()));
 });
 
@@ -293,7 +312,7 @@ app.post('/register', (req, res) => {
     createUser({ email: req.body.email || '', password: req.body.password, inviteCode: req.body.invite_code || '' });
     res.redirect('/login?registered=1');
   } catch (error) {
-    res.status(400).type('html').send(pageWrap('注册失败', authCard(`<h2>注册失败</h2><p class="muted">${escapeHtml(error.message)}</p><p><a href="/register">返回重试</a></p>`), registerScripts()));
+    res.status(400).type('html').send(pageWrap(UI_TEXT.registerFailed, authCard(`<h2>${escapeHtml(UI_TEXT.registerFailed)}</h2><p class="muted">${escapeHtml(error.message)}</p><p><a href="/register">${escapeHtml(UI_TEXT.retryLink)}</a></p>`), registerScripts()));
   }
 });
 
@@ -320,8 +339,8 @@ app.post('/api/public/send-register-code', async (req, res) => {
 });
 
 app.get('/login', (_req, res) => {
-  res.type('html').send(pageWrap('会员登录', authCard(`
-    <h2>会员登录</h2>
+  res.type('html').send(pageWrap(UI_TEXT.memberLogin, authCard(`
+    <h2>${escapeHtml(SITE_NAME)} ${escapeHtml(UI_TEXT.memberLogin)}</h2>
     <p class="muted">支持用户名或邮箱登录。</p>
     <form method="post" action="/login">
       <input name="username" placeholder="用户名或邮箱" />
@@ -330,7 +349,7 @@ app.get('/login', (_req, res) => {
       <div style="height:12px"></div>
       <button type="submit">登录</button>
     </form>
-    <p class="muted"><a href="/register">没有账号？去注册</a> · <a href="/admin/login">管理员入口</a></p>
+    <p class="muted"><a href="/register">${escapeHtml(UI_TEXT.noAccountLink)}</a> · <a href="/admin/login">${escapeHtml(UI_TEXT.adminEntryLink)}</a></p>
   `)));
 });
 
@@ -338,7 +357,7 @@ app.post('/login', (req, res) => {
   const username = String(req.body.username || '').trim();
   const user = authenticateUser(username, req.body.password || '');
   logLoginAttempt({ username, ok: !!user, ip: req.ip, ua: req.get('user-agent'), cfIp: req.get('cf-connecting-ip'), xff: req.get('x-forwarded-for') });
-  if (!user) return res.status(401).type('html').send(pageWrap('登录失败', authCard(`<h2>登录失败</h2><p class="muted">用户名/邮箱或密码错误。</p><p><a href="/login">返回重试</a></p>`)));
+  if (!user) return res.status(401).type('html').send(pageWrap(UI_TEXT.loginFailed, authCard(`<h2>${escapeHtml(UI_TEXT.loginFailed)}</h2><p class="muted">用户名/邮箱或密码错误。</p><p><a href="/login">${escapeHtml(UI_TEXT.retryLink)}</a></p>`)));
   const token = createMemberSession(user.id, 30);
   res.setHeader('Set-Cookie', `${MEMBER_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`);
   res.redirect('/');
@@ -352,20 +371,20 @@ app.post('/logout', (req, res) => {
 });
 
 app.get('/admin/login', (_req, res) => {
-  res.type('html').send(pageWrap('后台登录', authCard(`
-    <h2>${escapeHtml(SITE_NAME)} 管理后台</h2>
+  res.type('html').send(pageWrap(UI_TEXT.adminLogin, authCard(`
+    <h2>${escapeHtml(SITE_NAME)} ${escapeHtml(UI_TEXT.adminPanel)}</h2>
     <p class="muted">输入网站后台密码进入管理端。</p>
     <form method="post" action="/admin/login">
       <input type="password" name="password" placeholder="后台密码" autofocus />
       <div style="height:12px"></div>
       <button type="submit">进入后台</button>
     </form>
-    <p class="muted"><a href="/login">返回会员登录</a></p>
+    <p class="muted"><a href="/login">${escapeHtml(UI_TEXT.backToMemberLogin)}</a></p>
   `)));
 });
 
 app.post('/admin/login', (req, res) => {
-  if (!SITE_PASSWORD || String(req.body.password || '') !== SITE_PASSWORD) return res.status(401).type('html').send(pageWrap('后台登录失败', authCard(`<h2>后台登录失败</h2><p class="muted">密码错误。</p><p><a href="/admin/login">返回重试</a></p>`)));
+  if (!SITE_PASSWORD || String(req.body.password || '') !== SITE_PASSWORD) return res.status(401).type('html').send(pageWrap(UI_TEXT.adminLoginFailed, authCard(`<h2>${escapeHtml(UI_TEXT.adminLoginFailed)}</h2><p class="muted">密码错误。</p><p><a href="/admin/login">${escapeHtml(UI_TEXT.retryLink)}</a></p>`)));
   res.setHeader('Set-Cookie', `${ADMIN_COOKIE}=${adminAuthToken()}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`);
   res.redirect('/admin');
 });
@@ -391,9 +410,9 @@ app.get('/', requireMember, (req, res) => {
   const url = sub ? `${PUBLIC_BASE_URL}/sub/${sub.token}` : '-';
   const expire = user.membership_expires_at ? new Date(user.membership_expires_at).toLocaleString('zh-CN', { hour12: false, timeZone: 'UTC' }) + ' UTC' : '未开通';
   const active = membershipActive(user);
-  res.type('html').send(pageWrap('会员中心', `
+  res.type('html').send(pageWrap(UI_TEXT.memberCenter, `
     <div class="wrap">
-      <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><h1>会员中心</h1><p class="muted">你的专属订阅在这，会员到期就自动失效。</p></div><form method="post" action="/logout" style="margin:0"><button type="submit" style="width:auto">退出登录</button></form></div></div>
+      <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><h1>${escapeHtml(UI_TEXT.memberCenter)}</h1><p class="muted">${escapeHtml(UI_TEXT.centerWelcome)}</p></div><form method="post" action="/logout" style="margin:0"><button type="submit" style="width:auto">${escapeHtml(UI_TEXT.logout)}</button></form></div></div>
       <div class="grid">
         <div class="card"><h2>账号信息</h2><div class="sub-meta">用户名：<strong>${escapeHtml(user.username)}</strong></div><div class="sub-meta">状态：${active ? '✅ 会员有效' : '❌ 未开通或已到期'}</div><div class="sub-meta">到期时间：${escapeHtml(expire)}</div><div style="height:14px"></div><h2 style="font-size:18px">修改密码</h2><div class="sub-actions" style="grid-template-columns:1fr"><input id="oldPassword" type="password" placeholder="旧密码" /><input id="newPassword" type="password" placeholder="新密码（至少 6 位）" /><button type="button" onclick="changeMyPassword()">修改我的密码</button></div></div>
         <div class="card"><h2>我的订阅</h2>${sub ? `<div class="sub-meta">订阅状态：${sub.enabled ? '启用中' : '已关闭'}</div><input class="sub-url" readonly value="${escapeHtml(url)}" onclick="this.select()" /><div class="copy-hint">点一下自动全选复制</div><div class="sub-actions"><button type="button" onclick="resetMySub()">重置我的订阅地址</button><a href="${url}" target="_blank" class="secondary-btn">查看订阅内容</a></div>` : '<div class="muted">还没有分配订阅。</div>'}</div>

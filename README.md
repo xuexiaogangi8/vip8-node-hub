@@ -157,6 +157,28 @@ bash backup.sh
 - 邮箱验证码标题
 - 邮件发件显示名（当 `SMTP_FROM` 留空或仅填邮箱时）
 
+### 前台文案覆盖
+
+可以通过 `.env` 覆盖常见前台文案，例如：
+
+- `UI_MEMBER_CENTER`
+- `UI_MEMBER_REGISTER`
+- `UI_MEMBER_LOGIN`
+- `UI_ADMIN_LOGIN`
+- `UI_ADMIN_PANEL`
+- `UI_REGISTER_EMAIL_TITLE`
+- `UI_REGISTER_HINT`
+- `UI_EXISTING_ACCOUNT_LINK`
+- `UI_NO_ACCOUNT_LINK`
+- `UI_ADMIN_ENTRY_LINK`
+- `UI_BACK_TO_MEMBER_LOGIN`
+- `UI_REGISTER_FAILED`
+- `UI_LOGIN_FAILED`
+- `UI_ADMIN_LOGIN_FAILED`
+- `UI_RETRY_LINK`
+- `UI_CENTER_WELCOME`
+- `UI_LOGOUT`
+
 ### 可选强制检查
 如果你在安装时带上下面参数，脚本会额外校验：
 
