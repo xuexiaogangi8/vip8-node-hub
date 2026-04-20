@@ -120,6 +120,46 @@ ask_yes_no() {
   esac
 }
 
+show_final_summary() {
+  echo
+  echo "================ 最终配置摘要 ================"
+  echo "安装目录:        $APP_DIR"
+  echo "Git 分支:        $BRANCH"
+  echo "仓库地址:        ${REPO_URL:-（当前目录 / 手动放置代码）}"
+  echo "站点名称:        ${SITE_NAME:-（未设置）}"
+  echo "域名:            ${DOMAIN:-（未设置）}"
+  echo "对外地址:        ${PUBLIC_BASE_URL:-（未设置）}"
+  echo "监听端口:        $PORT"
+  echo "Nginx:           $([ "$SETUP_NGINX" = "1" ] && echo '启用' || echo '关闭')"
+  echo "HTTPS:           $([ "$ENABLE_HTTPS" = "1" ] && echo '启用' || echo '关闭')"
+  echo "UFW:             $([ "$INSTALL_UFW" = "1" ] && echo '启用' || echo '关闭')"
+  echo "Telegram:        $([ "$REQUIRE_TELEGRAM" = "1" ] && echo '启用' || echo '关闭')"
+  echo "SMTP:            $([ "$REQUIRE_SMTP" = "1" ] && echo '启用' || echo '关闭')"
+  echo "服务名:          $SERVICE_NAME"
+  echo "运行用户:        $APP_USER:$APP_GROUP"
+  echo "后台密码:        $([ -n "${SITE_PASSWORD:-}" ] && echo '已设置' || echo '未设置')"
+  echo "后台 Session:    $([ -n "${SITE_SESSION_SECRET:-}" ] && echo '已设置' || echo '未设置')"
+  echo "会员 Session:    $([ -n "${MEMBER_SESSION_SECRET:-}" ] && echo '已设置' || echo '未设置')"
+  if [ "$ENABLE_HTTPS" = "1" ]; then
+    echo "证书邮箱:        ${LETSENCRYPT_EMAIL:-（未设置）}"
+  fi
+  echo "============================================"
+  echo
+}
+
+confirm_or_exit() {
+  local answer
+  read -r -p "确认开始安装？ [Y/n]: " answer
+  answer="${answer:-Y}"
+  case "$answer" in
+    y|Y|yes|YES) ;;
+    *)
+      warn "已取消安装。"
+      exit 0
+      ;;
+  esac
+}
+
 run_interactive() {
   log "进入交互式安装向导"
   ask REPO_URL "仓库地址（可留空，表示当前目录已有代码）" "$REPO_URL"
