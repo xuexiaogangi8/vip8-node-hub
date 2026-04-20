@@ -143,15 +143,94 @@ systemctl status vip8-node-hub --no-pager
 journalctl -u vip8-node-hub -n 100 --no-pager
 ```
 
+### 本机测试
+```bash
+curl -I http://127.0.0.1:3010
+```
+
 ### 更新代码
 ```bash
-bash update.sh
+cd /opt/vip8-node-hub
+git pull
+rm -rf node_modules
+npm install
+systemctl restart vip8-node-hub
 ```
 
 ### 备份数据库
 ```bash
 bash backup.sh
 ```
+
+## 部署与迁移注意事项
+
+### 不要复用 node_modules
+
+本项目依赖 `better-sqlite3`，它是原生模块，会和以下环境强绑定：
+
+- 当前服务器
+- 当前系统环境
+- 当前 Node 版本
+
+如果把旧服务器的 `node_modules` 直接复制到新服务器，可能报错：
+
+```text
+was compiled against a different Node.js version
+```
+
+因此在以下场景中，必须重新安装依赖：
+
+- 换服务器
+- 升级 Node.js
+- 从备份恢复项目
+- 整个目录复制到另一台机器
+
+统一执行：
+
+```bash
+rm -rf node_modules
+npm install
+```
+
+### 测试环境推荐配置
+
+如果只是临时测试，可以关闭 Nginx / HTTPS，直接使用：
+
+```text
+http://服务器IP:3010
+```
+
+例如：
+
+```text
+http://4.190.168.97:3010
+```
+
+此时配置规则：
+
+- **域名**：填写纯 IP，例如 `4.190.168.97`
+- **对外地址**：填写完整 URL，例如 `http://4.190.168.97:3010`
+
+### 正式环境推荐配置
+
+正式对外提供服务时，推荐：
+
+- 开启 **Nginx**
+- 开启 **HTTPS**
+- 域名走 `443`
+- Node 应用仅监听内部端口，例如 `3010`
+
+### 数据迁移建议
+
+如果要迁移现有站点：
+
+- **代码**：从 GitHub 重新拉取
+- **数据**：迁移 `.env` 和 `data/app.db`
+- **不要迁移**：`node_modules/`
+
+### 推荐 Node 版本
+
+建议统一使用 **Node 22 LTS**，避免不同服务器之间因 Node 大版本不一致导致原生模块兼容问题。
 
 ## 环境变量
 
