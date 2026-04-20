@@ -1,0 +1,26 @@
+{
+  "name": "vip8-node-hub",
+  "version": "1.0.0",
+  "description": "Telegram node collector + latency tester + subscription generator",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "seed": "node scripts/seed.js"
+  },
+  "keywords": [
+    "telegram",
+    "subscription",
+    "proxy",
+    "nodes"
+  ],
+  "author": "OpenClaw",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
+    "nodemailer": "^6.10.1"
+  }
+}

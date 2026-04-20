@@ -1,0 +1,15 @@
+[Unit]
+Description=VIP8 Node Hub
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=/run/vip8-node-hub.pid
+ExecStart=/root/.openclaw/workspace/vip8-node-hub/start.sh
+ExecStop=/root/.openclaw/workspace/vip8-node-hub/stop.sh
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
