@@ -34,17 +34,23 @@ vip8-node-hub/
 
 ## 快速部署
 
-### 方式一：标准生产部署
+### 方式一：交互式安装（推荐）
 
 ```bash
 git clone git@github.com:xuexiaogangi8/vip8-node-hub.git /opt/vip8-node-hub
 cd /opt/vip8-node-hub
-cp .env.example .env
-# 编辑 .env
 bash install.sh
 ```
 
-### 方式二：脚本自动 clone + 安装
+脚本会一步步询问：
+- 站点名称
+- 域名
+- 对外地址
+- 后台密码
+- 是否启用 Nginx / HTTPS / UFW
+- 是否启用 Telegram / SMTP
+
+### 方式二：静默式安装（传环境变量）
 
 ```bash
 REPO_URL=git@github.com:xuexiaogangi8/vip8-node-hub.git \
@@ -86,6 +92,16 @@ bash install.sh
 ```
 
 ## install.sh 支持的参数
+
+脚本支持两种模式：
+
+- **交互式**：默认在 TTY 下、且未提供关键环境变量时自动进入
+- **静默式**：传入环境变量后直接执行
+
+也可以手动指定：
+
+- `INTERACTIVE=1`：强制交互模式
+- `INTERACTIVE=0`：强制静默模式
 
 可以通过环境变量控制安装行为：
 
