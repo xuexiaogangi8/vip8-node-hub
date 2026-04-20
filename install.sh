@@ -220,7 +220,18 @@ export DEBIAN_FRONTEND=noninteractive
 
 log "安装系统依赖"
 apt update
-apt install -y git curl ca-certificates sqlite3 nodejs npm
+apt install -y git curl ca-certificates sqlite3
+
+if ! command -v node >/dev/null 2>&1; then
+  log "未检测到 Node.js，尝试安装 nodejs"
+  apt install -y nodejs || {
+    warn "系统源安装 nodejs 失败，尝试使用 NodeSource"
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt install -y nodejs
+  }
+else
+  log "已检测到 Node.js：$(node -v)"
+fi
 
 if [ "$SETUP_NGINX" = "1" ]; then
   apt install -y nginx
