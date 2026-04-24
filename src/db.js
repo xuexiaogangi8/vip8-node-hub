@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source_type TEXT NOT NULL DEFAULT 'manual',
   source_ref TEXT,
+  source_subscription_id INTEGER,
   name TEXT,
   protocol TEXT NOT NULL,
   raw TEXT NOT NULL UNIQUE,
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS nodes (
   port INTEGER,
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (source_subscription_id) REFERENCES subscription_sources(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS checks (
@@ -43,6 +45,19 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   protocol_filter TEXT,
   device_limit INTEGER NOT NULL DEFAULT 5,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS subscription_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT,
+  url TEXT NOT NULL UNIQUE,
+  site_host TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  last_fetch_at TEXT,
+  last_error TEXT,
+  last_node_count INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS subscription_devices (
@@ -119,6 +134,15 @@ const userCols = db.prepare(`PRAGMA table_info(users)`).all().map((x) => x.name)
 if (!userCols.includes('email')) db.exec(`ALTER TABLE users ADD COLUMN email TEXT`);
 const subCols = db.prepare(`PRAGMA table_info(subscriptions)`).all().map((x) => x.name);
 if (!subCols.includes('device_limit')) db.exec(`ALTER TABLE subscriptions ADD COLUMN device_limit INTEGER NOT NULL DEFAULT 5`);
+const nodeCols = db.prepare(`PRAGMA table_info(nodes)`).all().map((x) => x.name);
+if (!nodeCols.includes('source_subscription_id')) db.exec(`ALTER TABLE nodes ADD COLUMN source_subscription_id INTEGER`);
+const sourceCols = db.prepare(`PRAGMA table_info(subscription_sources)`).all().map((x) => x.name);
+if (!sourceCols.includes('updated_at')) db.exec(`ALTER TABLE subscription_sources ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+if (!sourceCols.includes('site_host')) db.exec(`ALTER TABLE subscription_sources ADD COLUMN site_host TEXT`);
+if (!sourceCols.includes('status')) db.exec(`ALTER TABLE subscription_sources ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+if (!sourceCols.includes('last_fetch_at')) db.exec(`ALTER TABLE subscription_sources ADD COLUMN last_fetch_at TEXT`);
+if (!sourceCols.includes('last_error')) db.exec(`ALTER TABLE subscription_sources ADD COLUMN last_error TEXT`);
+if (!sourceCols.includes('last_node_count')) db.exec(`ALTER TABLE subscription_sources ADD COLUMN last_node_count INTEGER`);
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_member_sessions_token ON member_sessions(token);
@@ -127,6 +151,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email) WHERE email IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_email_codes_lookup ON email_verification_codes(email, purpose, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_nodes_source_subscription_id ON nodes(source_subscription_id);
+  CREATE INDEX IF NOT EXISTS idx_subscription_sources_status ON subscription_sources(status, id DESC);
 `);
 
 export default db;

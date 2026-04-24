@@ -9,6 +9,7 @@ import { buildSubscription } from './subscription.js';
 import { ingestTelegramUpdate, isTelegramAllowed } from './telegram.js';
 import { checkNodeById, startAutoChecker } from './scheduler.js';
 import { createSubscription, getSubscriptionByToken, listSubscriptions, resetSubscriptionToken, disableSubscription, enableSubscription, updateSubscriptionToken, deleteSubscription, clearSubscriptionDevices } from './subscriptions.js';
+import { createSourceSubscription, deleteSourceSubscription, listSourceSubscriptions, setSourceSubscriptionStatus, updateSourceSubscription } from './source-subscriptions.js';
 import { addMembershipDays, adminResetUserPassword, authenticateUser, changeOwnPassword, createInviteCode, createMemberSession, createUser, deleteInviteCode, deleteUser, getUserBySessionToken, listInviteCodes, listUsers, logLoginAttempt, membershipActive, recentEmailSendCount, resetUserSubscriptionToken, revokeMemberSession, saveEmailVerificationCode, setInviteCodeStatus, setUserStatus, syncAllUserSubscriptions, verifyEmailCode } from './users.js';
 
 async function sendTelegramMessage(chatId, text, replyToMessageId = null) {
@@ -197,7 +198,13 @@ function listNodes({ page = 1, pageSize = 100 } = {}) {
   const safePage = Math.max(1, Number(page || 1));
   const total = db.prepare(`SELECT COUNT(*) AS count FROM nodes`).get().count || 0;
   const offset = (safePage - 1) * safePageSize;
-  const rows = db.prepare(`SELECT * FROM nodes ORDER BY id DESC LIMIT ? OFFSET ?`).all(safePageSize, offset);
+  const rows = db.prepare(`
+    SELECT n.*, ss.name AS source_subscription_name
+    FROM nodes n
+    LEFT JOIN subscription_sources ss ON ss.id = n.source_subscription_id
+    ORDER BY n.id DESC
+    LIMIT ? OFFSET ?
+  `).all(safePageSize, offset);
   const statusMap = latestStatusesMap(rows.map((row) => row.id));
   return {
     items: rows.map((row) => ({ ...row, last_check: statusMap.get(row.id) || null })),
@@ -427,6 +434,7 @@ app.get('/admin', requireAdmin, (req, res) => {
   const total = nodePage.total;
   const online = db.prepare(`SELECT COUNT(*) AS count FROM nodes WHERE enabled = 1`).get().count || 0;
   const subscriptions = listSubscriptions();
+  const sourceSubscriptions = listSourceSubscriptions();
   const users = listUsers();
   const invites = listInviteCodes();
   const audits = db.prepare(`SELECT * FROM login_audit ORDER BY id DESC LIMIT 20`).all();
@@ -444,8 +452,9 @@ app.get('/admin', requireAdmin, (req, res) => {
         AND c.checked_at >= datetime('now', '-24 hours')
     )
   `).get().count || 0;
-  const rows = nodes.map((n) => `<tr><td>${n.id}</td><td>${escapeHtml(n.name || '-')}</td><td>${escapeHtml(n.protocol)}</td><td>${escapeHtml(n.host || '-')}</td><td>${n.port || '-'}</td><td>${n.last_check?.status === 'ok' ? '✅ 在线' : n.last_check ? '❌ 失败' : '⏳ 未检测'}</td><td>${n.last_check?.latency_ms ? n.last_check.latency_ms + ' ms' : '-'}</td><td><button type="button" onclick="deleteNode(${n.id}, '${escapeJs(n.name || '')}')">删除</button></td></tr>`).join('');
+  const rows = nodes.map((n) => `<tr><td>${n.id}</td><td>${escapeHtml(n.name || '-')}</td><td>${escapeHtml(n.source_subscription_name || '-')}</td><td>${escapeHtml(n.protocol)}</td><td>${escapeHtml(n.host || '-')}</td><td>${n.port || '-'}</td><td>${n.last_check?.status === 'ok' ? '✅ 在线' : n.last_check ? '❌ 失败' : '⏳ 未检测'}</td><td>${n.last_check?.latency_ms ? n.last_check.latency_ms + ' ms' : '-'}</td><td><button type="button" onclick="deleteNode(${n.id}, '${escapeJs(n.name || '')}')">删除</button></td></tr>`).join('');
   const pager = `<div class="pager"><span class="muted">第 ${nodePage.page} / ${nodePage.totalPages} 页 · 共 ${nodePage.total} 个节点</span><div class="pager-actions"><a class="secondary-btn ${nodePage.page <= 1 ? 'disabled-link' : ''}" href="/admin?page=${Math.max(1, nodePage.page - 1)}&pageSize=${nodePage.pageSize}">上一页</a><a class="secondary-btn ${nodePage.page >= nodePage.totalPages ? 'disabled-link' : ''}" href="/admin?page=${Math.min(nodePage.totalPages, nodePage.page + 1)}&pageSize=${nodePage.pageSize}">下一页</a></div></div>`;
+  const sourceRows = sourceSubscriptions.map((s) => `<tr><td>${s.id}</td><td>${escapeHtml(s.name || '-')}</td><td style="max-width:340px;word-break:break-all">${escapeHtml(s.url || '-')}</td><td>${escapeHtml(s.site_host || '-')}</td><td>${s.status === 'active' ? '✅ 正常' : s.status === 'disabled' ? '⏸ 已禁用' : '⚠️ 失效'}</td><td>${Number(s.node_count || 0)}</td><td>${Number(s.last_node_count || 0)}</td><td>${escapeHtml(s.last_fetch_at || '-')}</td><td style="max-width:220px;word-break:break-word">${escapeHtml(s.last_error || '-')}</td><td><div class="user-actions"><button type="button" onclick="editSource(${s.id}, '${escapeJs(s.name || '')}', '${escapeJs(s.url || '')}')">编辑</button>${s.status === 'disabled' ? `<button type="button" onclick="toggleSource(${s.id}, 'active')">启用</button>` : `<button type="button" onclick="toggleSource(${s.id}, 'disabled')">禁用</button>`}<button type="button" onclick="deleteSource(${s.id}, '${escapeJs(s.name || '')}', true)">删源+节点</button><button type="button" onclick="deleteSource(${s.id}, '${escapeJs(s.name || '')}', false)">仅删源</button></div></td></tr>`).join('');
   const subCards = subscriptions.map((s) => {
     const url = `${PUBLIC_BASE_URL}/sub/${s.token}`;
     const owner = users.find((u) => u.subscription_id === s.id);
@@ -458,11 +467,12 @@ app.get('/admin', requireAdmin, (req, res) => {
     <div class="wrap">
       <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><h1>${escapeHtml(SITE_NAME)} 管理后台</h1><p class="muted">会员制 MVP：注册、登录、开通时长、独立订阅。</p></div><form method="post" action="/admin/logout" style="margin:0"><button type="submit" style="width:auto">退出后台</button></form></div><div class="stats"><div class="stat"><div class="num">${total}</div><div class="muted">节点总数</div></div><div class="stat"><div class="num">${online}</div><div class="muted">在线节点</div></div><div class="stat"><div class="num">${avgLatency}</div><div class="muted">平均延迟</div></div></div></div>
       <div class="grid"><div class="card"><h2>手动添加节点</h2><form method="post" action="/api/nodes" onsubmit="submitForm(event)"><textarea name="raw" rows="6" placeholder="粘贴节点"></textarea><div style="height:12px"></div><button type="submit">添加节点</button></form></div><div class="card"><h2>邀请码管理</h2><form onsubmit="createInvite(event)"><input name="note" placeholder="备注，例如：4月活动码" /><div style="height:12px"></div><input name="maxUses" type="number" min="1" value="1" placeholder="可使用次数" /><div style="height:12px"></div><input name="code" placeholder="自定义邀请码（可空自动生成）" /><div style="height:12px"></div><button type="submit">创建邀请码</button></form><div style="height:14px"></div><table><thead><tr><th>ID</th><th>邀请码</th><th>备注</th><th>用量</th><th>状态</th><th>操作</th></tr></thead><tbody>${inviteRows || '<tr><td colspan="6">暂无邀请码</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h2>机场订阅源管理</h2><form onsubmit="createSource(event)"><input name="name" placeholder="机场名称，可空自动猜" /><div style="height:12px"></div><input name="url" placeholder="https://example.com/sub?..." /><div style="height:12px"></div><button type="submit">新增订阅源</button></form><div style="height:14px"></div><table><thead><tr><th>ID</th><th>机场名</th><th>订阅链接</th><th>域名</th><th>状态</th><th>现有节点</th><th>上次识别</th><th>上次抓取</th><th>最近错误</th><th>操作</th></tr></thead><tbody>${sourceRows || '<tr><td colspan="10">暂无订阅源</td></tr>'}</tbody></table></div>
       <div class="card"><h2>创建独立订阅</h2><form id="subForm" onsubmit="createSub(event)"><input name="name" placeholder="订阅名称" /><div style="height:12px"></div><input name="token" placeholder="自定义 token（可空）" /><div style="height:12px"></div><input name="protocol_filter" placeholder="协议筛选：vless,vmess" /><div style="height:12px"></div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="online_only" checked style="width:auto;padding:0" /> <span class="muted">只导出在线节点</span></label><div style="height:12px"></div><button id="subSubmitBtn" type="submit">创建订阅</button></form><div id="subResult" class="result-card"></div></div>
       <div class="card"><h2>节点清理</h2><div class="sub-meta">可保守清理：<strong>${conservativeCleanupCount}</strong> 个节点</div><div class="sub-meta">规则：删除最近 24 小时内一次成功都没有的节点。</div><div style="height:12px"></div><div class="sub-actions" style="grid-template-columns:1fr"><button type="button" onclick="runConservativeCleanup()">一键保守清理</button></div></div>
       <div class="card"><h2>会员管理</h2><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>状态</th><th>到期时间</th><th>订阅 token</th><th>操作</th></tr></thead><tbody>${userRows || '<tr><td colspan="7">暂无会员</td></tr>'}</tbody></table></div>
       <div class="card"><h2>订阅列表</h2><div class="sub-list">${subCards || '<div class="muted">暂无订阅</div>'}</div></div>
-      <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><h2>节点列表</h2>${pager}</div><table><thead><tr><th>ID</th><th>名称</th><th>协议</th><th>主机</th><th>端口</th><th>状态</th><th>延迟</th><th>操作</th></tr></thead><tbody>${rows || '<tr><td colspan="8">暂无节点</td></tr>'}</tbody></table></div>
+      <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><h2>节点列表</h2>${pager}</div><table><thead><tr><th>ID</th><th>名称</th><th>来源机场</th><th>协议</th><th>主机</th><th>端口</th><th>状态</th><th>延迟</th><th>操作</th></tr></thead><tbody>${rows || '<tr><td colspan="9">暂无节点</td></tr>'}</tbody></table></div>
       <div class="card"><h2>最近登录日志</h2><table><thead><tr><th>时间</th><th>用户名</th><th>结果</th><th>IP</th><th>User-Agent</th></tr></thead><tbody>${auditRows || '<tr><td colspan="5">暂无日志</td></tr>'}</tbody></table></div>
     </div>
   `, adminScripts()));
@@ -558,6 +568,41 @@ app.post('/api/subscriptions/:id/enable', (req, res) => respondSub(res, () => en
 app.post('/api/subscriptions/:id/update-token', (req, res) => respondSub(res, () => updateSubscriptionToken(Number(req.params.id), req.body?.token || '')));
 app.post('/api/subscriptions/:id/clear-devices', (req, res) => respondSub(res, () => clearSubscriptionDevices(Number(req.params.id))));
 app.delete('/api/subscriptions/:id', (req, res) => respondSub(res, () => deleteSubscription(Number(req.params.id))));
+app.get('/api/source-subscriptions', (_req, res) => res.json({ items: listSourceSubscriptions() }));
+app.post('/api/source-subscriptions', (req, res) => {
+  try {
+    res.json({ ok: true, item: createSourceSubscription({ name: req.body?.name || null, url: req.body?.url || '' }) });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+app.post('/api/source-subscriptions/:id', (req, res) => {
+  try {
+    const item = updateSourceSubscription(Number(req.params.id), { name: req.body?.name, url: req.body?.url, status: req.body?.status });
+    if (!item) return res.status(404).json({ ok: false, error: '订阅源不存在' });
+    res.json({ ok: true, item });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+app.post('/api/source-subscriptions/:id/status', (req, res) => {
+  try {
+    const item = setSourceSubscriptionStatus(Number(req.params.id), req.body?.status || 'active');
+    if (!item) return res.status(404).json({ ok: false, error: '订阅源不存在' });
+    res.json({ ok: true, item });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+app.delete('/api/source-subscriptions/:id', (req, res) => {
+  try {
+    const item = deleteSourceSubscription(Number(req.params.id), { deleteNodes: req.query?.deleteNodes !== '0' });
+    if (!item) return res.status(404).json({ ok: false, error: '订阅源不存在' });
+    res.json({ ok: true, item });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
 app.post('/api/users/:id/extend', (req, res) => {
   try { res.json({ ok: true, item: addMembershipDays(Number(req.params.id), Number(req.body?.days || 0)) }); }
   catch (error) { res.status(400).json({ ok: false, error: error.message }); }
@@ -633,6 +678,10 @@ function adminScripts() { return `<script>
   async function readJsonSafe(resp){const text=await resp.text();try{return JSON.parse(text);}catch(_){throw new Error(text||('HTTP '+resp.status));}}
   async function submitForm(e){e.preventDefault();const fd=new FormData(e.target);const payload=Object.fromEntries(fd.entries());const r=await fetch('/api/nodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'添加成功':'失败: '+j.error);if(j.ok) location.reload();}
   async function createSub(e){e.preventDefault();const form=e.target;const fd=new FormData(form);const payload=Object.fromEntries(fd.entries());payload.online_only = fd.get('online_only') ? 1 : 0;const r=await fetch('/api/subscriptions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'创建成功':'失败: '+j.error);if(j.ok) location.reload();}
+  async function createSource(e){e.preventDefault();const fd=new FormData(e.target);const payload=Object.fromEntries(fd.entries());const r=await fetch('/api/source-subscriptions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'订阅源已添加':'失败: '+j.error);if(j.ok) location.reload();}
+  async function editSource(id,currentName,currentUrl){const name=prompt('机场名称', currentName||'');if(name===null) return;const url=prompt('订阅链接', currentUrl||'');if(url===null) return;const r=await fetch('/api/source-subscriptions/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,url}),credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'订阅源已更新':'失败: '+j.error);if(j.ok) location.reload();}
+  async function toggleSource(id,status){const r=await fetch('/api/source-subscriptions/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status}),credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'状态已更新':'失败: '+j.error);if(j.ok) location.reload();}
+  async function deleteSource(id,name,deleteNodes){const tip=deleteNodes?'确认删除 '+(name||('订阅源 #'+id))+' 并删除其全部节点吗？':'确认只删除 '+(name||('订阅源 #'+id))+' 吗？现有节点会保留。';if(!confirm(tip)) return;const r=await fetch('/api/source-subscriptions/'+id+'?deleteNodes='+(deleteNodes?1:0),{method:'DELETE',credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'已删除':'失败: '+j.error);if(j.ok) location.reload();}
   async function deleteNode(id,name){if(!confirm('确认删除 '+(name||('节点 #'+id))+' 吗？')) return;const r=await fetch('/api/nodes/'+id,{method:'DELETE',credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?'已删除':'失败: '+j.error);if(j.ok) location.reload();}
   async function runConservativeCleanup(){if(!confirm('确认执行保守清理吗？\\n会删除最近 24 小时内一次成功都没有的节点。')) return;const r=await fetch('/api/nodes/cleanup-conservative',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?('已清理 '+j.deletedNodes+' 个节点，删掉 '+j.deletedChecks+' 条检测记录，剩余 '+j.remainingNodes+' 个节点'):('失败: '+j.error));if(j.ok) location.reload();}
   async function resetSub(id,name){if(!confirm('确认重置 '+(name||('订阅 #'+id))+' 吗？')) return;const r=await fetch('/api/subscriptions/'+id+'/reset',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin'});const j=await readJsonSafe(r);alert(j.ok?('新链接: ${escapeJs(PUBLIC_BASE_URL)}/sub/'+j.item.token):('失败: '+j.error));if(j.ok) location.reload();}

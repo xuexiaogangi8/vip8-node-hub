@@ -1,5 +1,6 @@
 import db from './db.js';
 import { parseNode } from './parser.js';
+import { ensureSourceSubscription, touchSourceFetchResult } from './source-subscriptions.js';
 
 const NODE_REGEX = /(ss:\/\/[^\s]+|ssr:\/\/[^\s]+|vmess:\/\/[^\s]+|vless:\/\/[^\s]+|trojan:\/\/[^\s]+|hy2:\/\/[^\s]+|hysteria2:\/\/[^\s]+)/gi;
 const URL_REGEX = /https?:\/\/[^\s]+/gi;
@@ -279,12 +280,27 @@ export async function ingestTelegramUpdate(update) {
   const directNodes = extractNodes(text);
   const candidateUrls = extractUrls(text).filter((url) => !directNodes.includes(url));
   const fetchedSubs = [];
-  const found = [...directNodes];
+  const found = directNodes.map((raw) => ({ raw, source_subscription_id: null }));
 
   for (const url of candidateUrls) {
+    const source = ensureSourceSubscription({ url });
     const result = await fetchSubscriptionNodes(url);
-    if (result.nodes.length) found.push(...result.nodes);
-    fetchedSubs.push({ url: result.url, count: result.nodes.length, error: result.error, format: result.format || null });
+    if (result.nodes.length) {
+      found.push(...result.nodes.map((raw) => ({ raw, source_subscription_id: source.id })));
+    }
+    touchSourceFetchResult(source.id, {
+      status: result.error ? 'invalid' : 'active',
+      lastError: result.error,
+      nodeCount: result.nodes.length,
+    });
+    fetchedSubs.push({
+      url: result.url,
+      source_id: source.id,
+      source_name: source.name,
+      count: result.nodes.length,
+      error: result.error,
+      format: result.format || null,
+    });
   }
 
   const doc = getTelegramDocument(msg);
@@ -292,7 +308,7 @@ export async function ingestTelegramUpdate(update) {
   if (doc?.file_id) {
     const downloaded = await fetchTelegramFileText(doc.file_id, doc.file_name || 'telegram-document');
     const parsed = downloaded.text ? parseTextToNodes(downloaded.text, doc.file_name || '') : { nodes: [], format: null };
-    if (parsed.nodes.length) found.push(...parsed.nodes);
+    if (parsed.nodes.length) found.push(...parsed.nodes.map((raw) => ({ raw, source_subscription_id: null })));
     documentInfo = {
       file_name: doc.file_name || null,
       mime_type: doc.mime_type || null,
@@ -308,16 +324,25 @@ export async function ingestTelegramUpdate(update) {
   const errors = [];
 
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO nodes (source_type, source_ref, name, protocol, raw, dedupe_key, host, port)
-    VALUES (@source_type, @source_ref, @name, @protocol, @raw, @dedupe_key, @host, @port)
+    INSERT OR IGNORE INTO nodes (source_type, source_ref, source_subscription_id, name, protocol, raw, dedupe_key, host, port)
+    VALUES (@source_type, @source_ref, @source_subscription_id, @name, @protocol, @raw, @dedupe_key, @host, @port)
   `);
 
-  for (const raw of [...new Set(found)]) {
+  const uniqueFound = [];
+  const seen = new Set();
+  for (const item of found) {
+    if (!item?.raw || seen.has(item.raw)) continue;
+    seen.add(item.raw);
+    uniqueFound.push(item);
+  }
+
+  for (const item of uniqueFound) {
     try {
-      const parsed = parseNode(raw);
+      const parsed = parseNode(item.raw);
       const result = insert.run({
         source_type: 'telegram',
         source_ref: String(msg.chat?.id || 'unknown'),
+        source_subscription_id: item.source_subscription_id || null,
         ...parsed,
       });
       if (result.changes > 0) added += 1;
@@ -332,7 +357,7 @@ export async function ingestTelegramUpdate(update) {
     ok: true,
     added,
     skipped,
-    total: [...new Set(found)].length,
+    total: uniqueFound.length,
     direct_total: directNodes.length,
     fetched_subscriptions: fetchedSubs,
     telegram_document: documentInfo,
