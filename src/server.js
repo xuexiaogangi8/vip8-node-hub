@@ -29,6 +29,25 @@ async function sendTelegramMessage(chatId, text, replyToMessageId = null) {
       body: JSON.stringify(payload),
     });
     const data = await resp.json().catch(() => ({}));
+
+    const sentMsg = data?.result;
+    const sentChatType = String(sentMsg?.chat?.type || '');
+    const sentMessageId = sentMsg?.message_id;
+    if (data?.ok && sentMessageId && ['group', 'supergroup'].includes(sentChatType)) {
+      setTimeout(async () => {
+        try {
+          await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: sentMessageId,
+            }),
+          });
+        } catch {}
+      }, 10_000);
+    }
+
     return { ok: !!data?.ok, data };
   } catch (error) {
     return { ok: false, error: error.message };
