@@ -10,6 +10,7 @@ import { ingestTelegramUpdate, isTelegramAllowed } from './telegram.js';
 import { checkNodeById, startAutoChecker } from './scheduler.js';
 import { createSubscription, getSubscriptionByToken, listSubscriptions, resetSubscriptionToken, disableSubscription, enableSubscription, updateSubscriptionToken, deleteSubscription, clearSubscriptionDevices } from './subscriptions.js';
 import { createSourceSubscription, deleteSourceSubscription, listSourceSubscriptions, setSourceSubscriptionStatus, updateSourceSubscription } from './source-subscriptions.js';
+import { deleteNodeById, deleteNodesByIds } from './node-deletion.js';
 import { addMembershipDays, adminResetUserPassword, authenticateUser, changeOwnPassword, createInviteCode, createMemberSession, createUser, deleteInviteCode, deleteUser, getUserBySessionToken, listInviteCodes, listUsers, logLoginAttempt, membershipActive, recentEmailSendCount, resetUserSubscriptionToken, revokeMemberSession, saveEmailVerificationCode, setInviteCodeStatus, setUserStatus, syncAllUserSubscriptions, verifyEmailCode } from './users.js';
 
 async function sendTelegramMessage(chatId, text, replyToMessageId = null) {
@@ -269,17 +270,9 @@ function conservativeCleanupNodes() {
     return { deletedNodes: 0, deletedChecks: 0, remainingNodes: db.prepare(`SELECT COUNT(*) AS count FROM nodes`).get().count || 0 };
   }
 
-  const placeholders = candidateIds.map(() => '?').join(',');
-  const deletedChecks = db.prepare(`SELECT COUNT(*) AS count FROM checks WHERE node_id IN (${placeholders})`).get(...candidateIds).count || 0;
-  const tx = db.transaction(() => {
-    db.prepare(`DELETE FROM checks WHERE node_id IN (${placeholders})`).run(...candidateIds);
-    db.prepare(`DELETE FROM nodes WHERE id IN (${placeholders})`).run(...candidateIds);
-  });
-  tx();
-
+  const result = deleteNodesByIds(candidateIds);
   return {
-    deletedNodes: candidateIds.length,
-    deletedChecks,
+    ...result,
     remainingNodes: db.prepare(`SELECT COUNT(*) AS count FROM nodes`).get().count || 0,
   };
 }
@@ -545,8 +538,7 @@ app.post('/api/nodes', async (req, res) => {
 app.delete('/api/nodes/:id', (req, res) => {
   const node = db.prepare(`SELECT * FROM nodes WHERE id = ?`).get(req.params.id);
   if (!node) return res.status(404).json({ ok: false, error: 'Node not found' });
-  db.prepare(`DELETE FROM checks WHERE node_id = ?`).run(node.id);
-  db.prepare(`DELETE FROM nodes WHERE id = ?`).run(node.id);
+  deleteNodeById(node.id);
   res.json({ ok: true, id: node.id, name: node.name || null });
 });
 app.post('/api/nodes/cleanup-conservative', (_req, res) => {

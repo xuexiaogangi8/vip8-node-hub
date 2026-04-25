@@ -1,4 +1,5 @@
 import db from './db.js';
+import { deleteNodesByIds } from './node-deletion.js';
 
 function normalizeName(name) {
   const value = String(name || '').trim();
@@ -123,11 +124,7 @@ export function deleteSourceSubscription(id, { deleteNodes = true } = {}) {
   const tx = db.transaction(() => {
     if (deleteNodes) {
       const nodeIds = db.prepare(`SELECT id FROM nodes WHERE source_subscription_id = ?`).all(id).map((x) => x.id);
-      if (nodeIds.length) {
-        const placeholders = nodeIds.map(() => '?').join(',');
-        db.prepare(`DELETE FROM checks WHERE node_id IN (${placeholders})`).run(...nodeIds);
-        db.prepare(`DELETE FROM nodes WHERE id IN (${placeholders})`).run(...nodeIds);
-      }
+      if (nodeIds.length) deleteNodesByIds(nodeIds);
     } else {
       db.prepare(`UPDATE nodes SET source_subscription_id = NULL WHERE source_subscription_id = ?`).run(id);
     }

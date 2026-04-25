@@ -1,5 +1,6 @@
 import db from './db.js';
 import { probeNode } from './checker.js';
+import { deleteNodeById } from './node-deletion.js';
 
 const KEEP_CHECKS_PER_NODE = Number(process.env.KEEP_CHECKS_PER_NODE || 30);
 const DISABLE_FAIL_STREAK = Number(process.env.DISABLE_FAIL_STREAK || 5);
@@ -33,8 +34,7 @@ function applyFailurePolicy(nodeId) {
   const failStreak = getFailStreak(nodeId);
 
   if (failStreak >= DELETE_FAIL_STREAK) {
-    db.prepare(`DELETE FROM checks WHERE node_id = ?`).run(nodeId);
-    db.prepare(`DELETE FROM nodes WHERE id = ?`).run(nodeId);
+    deleteNodeById(nodeId);
     return { action: 'deleted', failStreak };
   }
 
