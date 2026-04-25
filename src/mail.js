@@ -5,6 +5,10 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || 'true') !== 'false';
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+const SITE_NAME = String(process.env.SITE_NAME || '').trim() || (() => {
+  try { return PUBLIC_BASE_URL ? (new URL(PUBLIC_BASE_URL).host || '会员站') : '会员站'; } catch { return '会员站'; }
+})();
 const MAIL_FROM_RAW = process.env.MAIL_FROM || SMTP_USER || '';
 const MAIL_FROM = (() => {
   const value = String(MAIL_FROM_RAW || '').trim();
@@ -12,10 +16,6 @@ const MAIL_FROM = (() => {
   if (value.includes('<')) return value;
   if (value.includes('@')) return `${SITE_NAME} <${value}>`;
   return value;
-})();
-const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
-const SITE_NAME = String(process.env.SITE_NAME || '').trim() || (() => {
-  try { return PUBLIC_BASE_URL ? (new URL(PUBLIC_BASE_URL).host || '会员站') : '会员站'; } catch { return '会员站'; }
 })();
 
 let transporter = null;
